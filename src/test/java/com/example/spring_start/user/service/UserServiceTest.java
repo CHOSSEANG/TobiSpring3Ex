@@ -15,6 +15,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -42,27 +43,40 @@ public class UserServiceTest {
     @BeforeEach
     public void setUp() {
         users = Arrays.asList(
-                new User("bumjin","박범진","p1", Level.BASIC,MIN_LOGCOUNT_FOR_SILVER-1,0),
-                new User("joytouch","강명성","p2",Level.BASIC,MIN_LOGCOUNT_FOR_SILVER,0),
-                new User("erwins", "신승한", "p3",Level.SILVER,60,MIN_RECOMMEND_FOR_GOLD-1),
-                new User("madnite1", "이상호", "p4",Level.SILVER,60,MIN_RECOMMEND_FOR_GOLD),
-                new User("green", "오민규", "p5",Level.GOLD,100,Integer.MAX_VALUE)
+                new User("bumjin", "박범진", "p1", Level.BASIC, MIN_LOGCOUNT_FOR_SILVER - 1, 0),
+                new User("joytouch", "강명성", "p2", Level.BASIC, MIN_LOGCOUNT_FOR_SILVER + 1, 0),
+                new User("erwins", "신승한", "p3", Level.SILVER, 60, MIN_RECOMMEND_FOR_GOLD - 1),
+                new User("madnite1", "이상호", "p4", Level.SILVER, 60, MIN_RECOMMEND_FOR_GOLD),
+                new User("green", "오민규", "p5", Level.GOLD, 100, Integer.MAX_VALUE)
         );
     }
 
     @Test
-    public void upgradeLevels() throws Exception{
+    public void upgradeLevels() throws Exception {
         userDao.deleteAll();
-        for(User user : users){
+        for (User user : this.users) {
             userDao.add(user);
         }
 
-        userService.upgradeLevels();
-        checkLevelUpgraded(users.get(0),false);
-        checkLevelUpgraded(users.get(1),true);
-        checkLevelUpgraded(users.get(2),false);
-        checkLevelUpgraded(users.get(3),true);
-        checkLevelUpgraded(users.get(4),false);
+        MockUserDao mockUserDao = new MockUserDao(userDao.getAll());
+        userServiceImpl.setUserDao(mockUserDao);
+
+
+        // 테스트 대상 실행
+        userServiceImpl.upgradeLevels();
+
+
+//        // DB 결과 확인
+//        checkLevelUpgraded(users.get(0), false);
+//        checkLevelUpgraded(users.get(1), true);
+//        checkLevelUpgraded(users.get(2), false);
+//        checkLevelUpgraded(users.get(3), true);
+//        checkLevelUpgraded(users.get(4), false);
+
+        List<User> updated = mockUserDao.getUpdated();
+        assert (updated.size() == 2);
+        checkUserAndLevel(updated.get(0), "joytouch", Level.SILVER);
+        checkUserAndLevel(updated.get(1), "madnite1", Level.GOLD);
     }
 
     @Test
@@ -79,12 +93,12 @@ public class UserServiceTest {
         User userWithLevelRead = userDao.get(userWithLevel.getId());
         User userWithoutLevelRead = userDao.get(userWithoutLevel.getId());
 
-        assert(userWithLevelRead.getLevel().equals(userWithLevel.getLevel()));
-        assert(userWithoutLevelRead.getLevel().equals(Level.BASIC));
+        assert (userWithLevelRead.getLevel().equals(userWithLevel.getLevel()));
+        assert (userWithoutLevelRead.getLevel().equals(Level.BASIC));
     }
 
     @Test
-    public void upgradeAllOrNothing() throws Exception{
+    public void upgradeAllOrNothing() throws Exception {
         UserService testUserService = new TestUserService(users.get(3).getId());
         testUserService.setUserDao(this.userDao);
 
@@ -94,36 +108,38 @@ public class UserServiceTest {
         txUserService.setUserService(testUserService);
 
 
-
         userDao.deleteAll();
 
-        for(User user: users) userDao.add(user);
-        try{
+        for (User user : users) userDao.add(user);
+        try {
             txUserService.upgradeLevels();
             fail("TestUserService Exception expected");
-        }
-        catch(TestUserServiceException e){
+        } catch (TestUserServiceException e) {
 
         }
-        checkLevelUpgraded(users.get(1),false);
+        checkLevelUpgraded(users.get(1), false);
         userServiceImpl.setMailSender(mailSender);
     }
 
-    private void checkLevelUpgraded(User user, boolean upgraded){
+    private void checkLevelUpgraded(User user, boolean upgraded) {
         User userUpdate = userDao.get(user.getId());
-        if (upgraded){
-            assert(userUpdate.getLevel().equals(user.getLevel().nextLevel()));
-        }
-        else{
-            assert(userUpdate.getLevel().equals(user.getLevel()));
+        if (upgraded) {
+            assert (userUpdate.getLevel().equals(user.getLevel().nextLevel()));
+        } else {
+            assert (userUpdate.getLevel().equals(user.getLevel()));
         }
 
     }
 
-    static class TestUserService extends UserServiceImpl{
+    private void checkUserAndLevel(User updated, String expectedId, Level expectedLevel) {
+        assert (updated.getId().equals(expectedId));
+        assert (updated.getLevel() == expectedLevel);
+    }
+
+    static class TestUserService extends UserServiceImpl {
         private String id;
 
-        private TestUserService(String id){
+        private TestUserService(String id) {
             this.id = id;
         }
 
@@ -134,7 +150,52 @@ public class UserServiceTest {
 
     }
 
-    static class TestUserServiceException extends RuntimeException{
+    static class TestUserServiceException extends RuntimeException {
+
+    }
+
+    static class MockUserDao implements UserDao {
+        private final List<User> users;
+        private final List<User> updated = new ArrayList();
+
+
+        private MockUserDao(List<User> users) {
+            this.users = users;
+        }
+
+        public List<User> getUpdated() {
+            return this.updated;
+        }
+
+
+        public void update(User user) {
+            updated.add(user);
+        }
+
+
+        public List<User> getAll() {
+            return this.users;
+        }
+
+
+        // 아래로는 테스트에 사용되지 않는 메소드들
+        public void deleteAll() {
+            throw new UnsupportedOperationException();
+        }
+
+        public void add(User user) {
+            throw new UnsupportedOperationException();
+        }
+
+
+        public int getCount() {
+            throw new UnsupportedOperationException();
+        }
+
+
+        public User get(String id) {
+            throw new UnsupportedOperationException();
+        }
 
     }
 }
