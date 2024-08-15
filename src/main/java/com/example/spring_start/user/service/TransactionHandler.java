@@ -1,8 +1,8 @@
 package com.example.spring_start.user.service;
 
-import org.springframework.cglib.proxy.InvocationHandler;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
+import java.lang.reflect.InvocationHandler;
 import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import java.lang.reflect.InvocationTargetException;
