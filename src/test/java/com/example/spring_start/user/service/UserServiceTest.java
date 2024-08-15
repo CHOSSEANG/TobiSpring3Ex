@@ -165,6 +165,7 @@ public class UserServiceTest {
 
     }
 
+    // 이걸 이용해서 자동 프록시 생성기를 사용하게 해야하는데 옛날 방식이라서 실패
     static class TestUserService extends UserServiceImpl {
         private String id;
 
