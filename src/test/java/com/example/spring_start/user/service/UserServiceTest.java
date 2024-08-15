@@ -1,24 +1,22 @@
 package com.example.spring_start.user.service;
 
+import com.example.spring_start.mail.MailSender;
 import com.example.spring_start.user.dao.UserDao;
-import com.example.spring_start.user.dao.UserDaoJdbc;
 import com.example.spring_start.user.domain.Level;
 import com.example.spring_start.user.domain.User;
-import com.example.spring_start.mail.MailSender;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.mail.SimpleMailMessage;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -44,6 +42,8 @@ public class UserServiceTest {
     MailSender mailSender;
     @Autowired
     UserServiceImpl userServiceImpl;
+    @Autowired
+    ApplicationContext context;
 
     @BeforeEach
     public void setUp() {
@@ -103,17 +103,14 @@ public class UserServiceTest {
     }
 
     @Test
+    @DirtiesContext
     public void upgradeAllOrNothing() throws Exception {
         UserService testUserService = new TestUserService(users.get(3).getId());
         testUserService.setUserDao(this.userDao);
 
-        TransactionHandler txHandler = new TransactionHandler();
-        txHandler.setTarget(testUserService);
-        txHandler.setTransactionManager(this.transactionManager);
-        txHandler.setPattern("upgradeLevels");
-        UserService txUserService = (UserService) Proxy.newProxyInstance(
-                getClass().getClassLoader(),new Class[] {UserService.class}, txHandler
-        );
+        TxProxyFactoryBean txProxyFactoryBean = context.getBean("&userService", TxProxyFactoryBean.class);
+        txProxyFactoryBean.setTarget(testUserService);
+        UserService txUserService = (UserService) txProxyFactoryBean.getObject();
 
         userDao.deleteAll();
 
@@ -159,9 +156,9 @@ public class UserServiceTest {
         verify(mockUserDao, times(2)).update(any(User.class));
         verify(mockUserDao, times(2)).update(any(User.class));
         verify(mockUserDao).update(users.get(1));
-        assert(users.get(1).getLevel().equals(Level.SILVER));
+        assert (users.get(1).getLevel().equals(Level.SILVER));
         verify(mockUserDao).update(users.get(3));
-        assert(users.get(3).getLevel().equals(Level.GOLD));
+        assert (users.get(3).getLevel().equals(Level.GOLD));
 
         ArgumentCaptor<SimpleMailMessage> mailMessageArg = ArgumentCaptor.forClass(SimpleMailMessage.class);
 
