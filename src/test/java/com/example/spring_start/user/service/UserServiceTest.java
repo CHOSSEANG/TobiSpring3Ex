@@ -8,43 +8,36 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.springframework.aop.framework.ProxyFactoryBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
-import org.springframework.transaction.PlatformTransactionManager;
 
-import javax.sql.DataSource;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import static com.example.spring_start.user.service.UserServiceImpl.MIN_LOGCOUNT_FOR_SILVER;
 import static com.example.spring_start.user.service.UserServiceImpl.MIN_RECOMMEND_FOR_GOLD;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(SpringExtension.class)
 @ContextConfiguration(locations = "/test-applicationContext.xml")
 public class UserServiceTest {
-    @Autowired
-    UserService userService;
+    //@formatter:off
+    @Autowired UserService userService;
     List<User> users; // 테스트 픽스처
-    @Autowired
-    private UserDao userDao;
-    @Autowired
-    DataSource dataSource;
-    @Autowired
-    PlatformTransactionManager transactionManager;
-    @Autowired
-    MailSender mailSender;
-    @Autowired
+    @Autowired private UserDao userDao;
+    @Autowired MailSender mailSender;
     UserServiceImpl userServiceImpl;
-    @Autowired
-    ApplicationContext context;
+    @Autowired ApplicationContext context;
+    TestUserService testUserService;
+    //@formatter:on
 
     @BeforeEach
     public void setUp() {
@@ -109,20 +102,20 @@ public class UserServiceTest {
         UserService testUserService = new TestUserService(users.get(3).getId());
         testUserService.setUserDao(this.userDao);
 
-        ProxyFactoryBean txProxyFactoryBean = context.getBean("&userService", ProxyFactoryBean.class);
-        txProxyFactoryBean.setTarget(testUserService);
-        UserService txUserService = (UserService) txProxyFactoryBean.getObject();
+//        ProxyFactoryBean txProxyFactoryBean = context.getBean("&userService", ProxyFactoryBean.class);
+//        txProxyFactoryBean.setTarget(testUserService);
+//        UserService txUserService = (UserService) txProxyFactoryBean.getObject();
 
         userDao.deleteAll();
 
         for (User user : users) userDao.add(user);
         try {
-            txUserService.upgradeLevels();
+            testUserService.upgradeLevels();
             fail("TestUserService Exception expected");
         } catch (TestUserServiceException e) {
 
         }
-        checkLevelUpgraded(users.get(1), false);
+        checkLevelUpgraded(users.get(3), false);
         userServiceImpl.setMailSender(mailSender);
     }
 
@@ -165,12 +158,26 @@ public class UserServiceTest {
 
     }
 
+    @Test
+    public void readOnlyTransactionAttribute() {
+        assertThatThrownBy(() -> {
+            testUserService.getAll();
+        }).isInstanceOf(TransientDataAccessException.class);
+    }
+
     // 이걸 이용해서 자동 프록시 생성기를 사용하게 해야하는데 옛날 방식이라서 실패
     static class TestUserService extends UserServiceImpl {
-        private String id;
+        private String id = "madnite1";
 
         private TestUserService(String id) {
             this.id = id;
+        }
+
+        public List<User> getAll() {
+            for (User user : super.getAll()) {
+                super.update(user);
+            }
+            return null;
         }
 
         protected void upgradeLevel(User user) {
